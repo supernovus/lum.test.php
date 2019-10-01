@@ -104,7 +104,15 @@ class Harness
   public function runTest ($__test_file)
   {
     ob_start(); // Start output buffering.
-    $returnVal = include $__test_file;
+    $returnVal = null;
+    try
+    {
+      $returnVal = include $__test_file;
+    }
+    catch (\Throwable $e)
+    {
+      $this->testSuite->fail($__test_file, $e->getMessage());
+    }
     $outputVal = ob_get_contents();
     @ob_end_clean(); // End output buffering.
     $this->testOutput[$__test_file] = $outputVal;
