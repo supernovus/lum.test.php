@@ -15,16 +15,25 @@ I have plans to add TAP version 13 at some point, but it's not there yet.
 | Lum\Test\Functional     | A way to use the tests in a functional style.     |
 | Lum\Test\Harness        | A test harness for running test suites.           |
 
+## lumtest
+
+A binary called `lumtest` is added to the `vendor/bin` which can be used
+to test your apps. It can take two parameters:
+
+| Parameter | Description          | Default value                       |
+| --------- | -------------------- | ----------------------------------- |
+|  -d       | Directory for tests  | 'test'                              |
+|  -e       | Extension for tests  | 'php'                               |
+
+The extensions may have multiple names separated by a | character.
+
 ## Examples
 
-See the `runtests.php` for an example of how to build a top level test
-runner using the Lum\Test\Harness library. See the various tests in `test`
-for examples of using the other libraries.
+See the various tests in `test` for examples of using the libraries.
 
 ## Testing
 
-You can test this library set by running `composer test` or `php runtests.php`.
-They both do the same thing, so it's up to you.
+You can test this library set by running `composer test`.
 
 ## Official URLs
 

@@ -22,8 +22,9 @@
       "Lum\\": "lib"
     }
   },
+  "bin": ["bin/lumtest"],  
   "scripts":
   {
-    "test": "php runtests.php"
+    "test": "lumtest"
   }
 }

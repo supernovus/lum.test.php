@@ -1,9 +1,15 @@
+#!/usr/bin/env php
 <?php
 
 require_once 'vendor/autoload.php';
 
+$opts = getopt('d:e:');
+
+$dir = (isset($opts['d']) && is_string($opts['d'])) ? $opts['d'] : 'test';
+$ext = (isset($opts['e']) && is_string($opts['e'])) ? $opts['e'] : 'php';
+
 $tests = new \Lum\Test\Harness();
-$tests->addDir('test');
+$tests->addDir($dir, $ext);
 $tests->run();
 
 echo $tests->summary();
