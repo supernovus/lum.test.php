@@ -21,5 +21,9 @@
     {
       "Lum\\": "lib"
     }
+  },
+  "scripts":
+  {
+    "test": "php runtests.php"
   }
 }

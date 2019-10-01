@@ -4,29 +4,105 @@ namespace Lum;
 
 class Test
 {
+  public $debug = false;
+  protected $tapVersion = 12;
+  protected $ran = 0;
   protected $failed = 0;
   protected $skipped = 0;
+  protected $todo = 0;
   protected $planned = 0;
   protected $stackTrace = 0;
-  protected $traceLevel = 0;
   protected $logs = [];
+  public $traceLevel = 0;
 
   /**
    * Build a Test object.
    *
-   * @param int $plan  (optional) Number of tests planned.
-   * @param int $trace (optional) Stack trace level (default 0).
+   * @param mixed $opts  Generally an array of named options.
+   *                     If it's an integer, it's the 'version' option.
+   *
+   * Named options:
+   *
+   *  'plan'     (int)   The number of tests we have planned.
+   *                     Default: 0 (unplanned)
+   *
+   *  'trace'    (int)   The level of stack trace details we should return.
+   *                     Default: 0 (no stack trace)
+   *
+   *  'version'  (int)   The TAP version.
+   *                     Default: 12 (currently only supported version).
+   *
    */
-  public function __construct ($plan=null, $trace=null)
+  public function __construct ($opts=[])
   {
-    if (isset($plan))
+    if (is_int($opts))
     {
-      $this->plan($plan);
+      $opts = ['version'=>$opts];
     }
-    if (isset($trace))
+    elseif (!is_array($opts))
     {
-      $this->trace($trace);
+      $opts = [];
     }
+    if (isset($opts['plan']))
+    {
+      $this->plan($opts['plan']);
+    }
+    if (isset($opts['trace']))
+    {
+      $this->trace($opts['trace']);
+    }
+    if (isset($opts['version']))
+    {
+      $this->version($opts['version']);
+    }
+  }
+
+  /**
+   * Get the number of tests planned.
+   */
+  public function planned ()
+  {
+    return $this->planned;
+  }
+
+  /**
+   * Get the number of tests ran.
+   */
+  public function ran ()
+  {
+    return $this->ran;
+  }
+
+  /**
+   * Get the number of tests that failed.
+   */
+  public function failed ()
+  {
+    return $this->failed;
+  }
+
+  /**
+   * Get the number of tests that were skipped.
+   */
+  public function skipped ()
+  {
+    return $this->skipped;
+  }
+
+  /**
+   * Get the number of tests that are TODO.
+   */
+  public function areTodo ()
+  {
+    return $this->todo;
+  }
+
+  /**
+   * Get the logs.
+   */
+  public function getLogs ()
+  {
+    return $this->logs;
   }
 
   /**
@@ -75,6 +151,38 @@ class Test
   }
 
   /**
+   * Change or get the TAP version.
+   *
+   * @param int $ver (Optional) If specified, set the TAP version.
+   *
+   * The TAP version can be 12 or 13. Those are the only two supported
+   * versions. If you specify something other than one of those, an
+   * Exception will be thrown.
+   *
+   * Support for version 13 is being planned, and will require the
+   * YAML PHP extension to be available.
+   *
+   */
+  public function version ($ver=null)
+  {
+    if (isset($ver) && is_int($ver))
+    {
+      if ($ver == 12 || $ver == 13)
+      {
+        $this->tapVersion = $ver;
+      }
+      else
+      {
+        throw new \Exception("Invalid TAP version, must be 12 or 13.");
+      }
+    }
+    else
+    {
+      return $this->tapVersion;
+    }
+  }
+
+  /**
    * Does a test pass?
    *
    * @param bool $test  The evaluated test value.
@@ -85,6 +193,7 @@ class Test
   public function ok ($test, $desc=null, $directive=null)
   {
     $log = new Test_Log();
+    $this->ran++;
     if ($test)
     {
       $log->ok = true;
@@ -175,6 +284,61 @@ class Test
   }
 
   /**
+   * Test two values with a specified comparitor.
+   *
+   * @param mixed $got  Value we got from the test.
+   * @param mixed $want  Value we wanted/expected.
+   * @param string $comparitor  A comparitor to test with.
+   *  One of: '===', '!==', '==', '!=', '>', '<', '<=', '>='
+   * @param string $desc (Optional) Description of test.
+   * @param bool $stringify (Optional, default true) JSONify output?
+   * @param Test_Log  The log entry for this test.
+   */
+  public function cmp ($got, $want, $comp, $desc=null, $stringify=true)
+  {
+    switch ($comp)
+    {
+      case '===':
+        $test = ($got === $want);
+        break;
+      case '!==':
+        $test = ($got !== $want);
+        break;
+      case '==':
+        $test = ($got == $want);
+        break;
+      case '!=':
+        $test = ($got != $want);
+        break;
+      case '<':
+        $test = ($got < $want);
+        break;
+      case '>':
+        $test = ($got > $want);
+        break;
+      case '<=':
+        $test = ($got <= $want);
+        break;
+      case '>=':
+        $test = ($got >= $want);
+        break;
+      default:
+        $test = false;
+    }
+    $this->traceLevel++;
+    $log = $this->ok($test, $desc);
+    $this->traceLevel--;
+    if (!$test)
+    {
+      $log->details['got'] = $got;
+      $log->details['wanted'] = $want;
+      $log->details['comparitor'] = $comp;
+      $log->details['stringify'] = $stringify;
+    }
+    return $log;
+  }
+
+  /**
    * Test to see if two values are equal (using === comparison).
    *
    * @param mixed $got  Value we got from the test.
@@ -185,16 +349,26 @@ class Test
    */
   public function is ($got, $want, $desc=null, $stringify=true)
   {
-    $test = ($got === $want);
     $this->traceLevel++;
-    $log = $this->ok($test, $desc);
+    $log = $this->cmp($got, $want, '===', $desc, $stringify);
     $this->traceLevel--;
-    if (!$test)
-    {
-      $log->details['got'] = $got;
-      $log->details['wanted'] = $want;
-      $log->details['stringify'] = $stringify;
-    }
+    return $log;
+  }
+
+  /**
+   * Test to see if two values are NOT equal (using !== comparison).
+   *
+   * @param mixed $got  Value we got from the test.
+   * @param mixed $want Value we wanted/expected.
+   * @param string $desc (Optional) Description of test.
+   * @param bool $stringify (Optional, default true) JSONify output?
+   * @return Test_Log  The log entry for this test.
+   */
+  public function isnt ($got, $want, $desc=null, $stringify=true)
+  {
+    $this->traceLevel++;
+    $log = $this->cmp($got, $want, '!==', $desc, $stringify);
+    $this->traceLevel--;
     return $log;
   }
 
@@ -269,11 +443,33 @@ class Test
     $this->traceLevel++;
     $log = $this->ok(true, $desc);
     $this->traceLevel--;
+    $log->skipped = true;
     if (isset($reason) && is_string($reason))
     {
-      $log->skippedReason = $reason;
+      $log->reason = $reason;
     }
     $this->skipped++;
+    return $log;
+  }
+
+  /**
+   * Mark a test as TODO.
+   *
+   * @param string $reason  (Optional) What needs to be done to pass the test.
+   * @param string $desc    (Optional) Description of test.
+   * @return Test_Log  The log entry for this test.
+   */
+  public function todo ($reason=null, $desc=null)
+  {
+    $this->traceLevel++;
+    $log = $this->ok(false, $desc);
+    $this->traceLevel--;
+    $log->todo = true;
+    if (isset($reason) && is_string($reason))
+    {
+      $log->reason = $reason;
+    }
+    $this->todo++;
     return $log;
   }
 
@@ -333,10 +529,9 @@ class Test
       $out .= "\n";
     }
 
-    $ran = $t-1;
-    if ($this->planned > 0 && $this->planned != $ran)
+    if ($this->planned > 0 && $this->planned != $this->ran)
     {
-      $out .= "# Looks like you planned '{$this->planned}' but ran '$ran' tests\n";
+      $out .= "# Looks like you planned '{$this->planned}' but ran '{$this->ran}' tests\n";
     }
 
     return $out;
@@ -360,9 +555,14 @@ class Test_Log
   public $skipped = false;
 
   /**
+   * The test is TODO.
+   */
+  public $todo = false;
+
+  /**
    * The reason the test was skipped.
    */
-  public $skippedReason = '';
+  public $reason = '';
 
   /**
    * Description of the test.
@@ -386,6 +586,8 @@ class Test_Log
     else
       $out = 'not ok ';
 
+    $out .= $num;
+
     if (is_string($this->desc))
       $out .= ' - ' . $this->desc;
 
@@ -394,7 +596,9 @@ class Test_Log
     elseif ($this->directive instanceof \Throwable)
       $out .= ' # ' . $this->directive->getMessage();
     elseif ($this->skipped)
-      $out .= ' # SKIP ' . $this->skippedReason;
+      $out .= ' # SKIP ' . $this->reason;
+    elseif ($this->todo)
+      $out .= ' # TODO ' . $this->reason;
 
     $out .= "\n";
 
@@ -424,8 +628,12 @@ class Test_Log
         $got = json_encode($got);
         $want = json_encode($want);
       }
-      $out .= "#       got: $got\n";
       $out .= "#  expected: $want\n";
+      $out .= "#       got: $got\n";
+      if (isset($this->details['comparitor']))
+      {
+        $out .= "#        op: {$this->details['comparitor']}\n";
+      }
     }
 
     return $out;

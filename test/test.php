@@ -3,7 +3,7 @@
 require_once 'vendor/autoload.php';
 
 $test = new \Lum\Test();
-$test->plan(9);
+$test->plan(10);
 $test->trace(1);
 
 $test->ok((1==1), 'ok()');
@@ -22,4 +22,7 @@ $test->dies(function ()
   wrong();
 }, "dies(error_closure)");
 
+$test->todo('need to implement v13', 'yaml diagnostics');
+
 echo $test->tap();
+return $test;
