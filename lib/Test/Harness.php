@@ -105,6 +105,7 @@ class Harness
   {
     ob_start(); // Start output buffering.
     $returnVal = null;
+    $threw = false;
     try
     {
       $returnVal = include $__test_file;
@@ -112,11 +113,16 @@ class Harness
     catch (\Throwable $e)
     {
       $this->testSuite->fail($__test_file, $e->getMessage());
+      $threw = true;
     }
     $outputVal = ob_get_contents();
     @ob_end_clean(); // End output buffering.
     $this->testOutput[$__test_file] = $outputVal;
     $this->testInstances[$__test_file] = $returnVal;
+    if ($threw)
+    {
+      return [$outputVal, $returnVal];
+    }
     if (isset($returnVal) && $returnVal instanceof \Lum\Test)
     { // Use the Test instance to determine success.
       $testsFailed = $returnVal->failed() - $returnVal->areTodo();
