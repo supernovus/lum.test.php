@@ -26,5 +26,12 @@
   "scripts":
   {
     "test": "lumtest"
+  },
+  "extra":
+  {
+    "branch-alias":
+    {
+      "dev-main": "2.x-dev"
+    }
   }
 }
