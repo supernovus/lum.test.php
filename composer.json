@@ -12,7 +12,7 @@
   ],
   "require":
   {
-    "lum/lum-compat": "^1.0"
+    "lum/lum-compat": "^2.0"
   },
   "autoload":
   {
@@ -30,7 +30,7 @@
   {
     "branch-alias":
     {
-      "dev-main": "2.x-dev"
+      "dev-main": "3.x-dev"
     }
   }
 }
