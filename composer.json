@@ -12,8 +12,7 @@
   ],
   "require":
   {
-    "php": "^7.0 || ^8.0",
-    "ext-json": "*"
+    "lum/lum-compat": "^1.0"
   },
   "autoload":
   {
