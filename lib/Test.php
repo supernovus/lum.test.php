@@ -4,24 +4,27 @@ namespace Lum;
 
 class Test
 {
-  public $debug = false;
-  protected $tapVersion = 12;
-  protected $ran = 0;
-  protected $failed = 0;
-  protected $skipped = 0;
-  protected $todo = 0;
-  protected $planned = 0;
-  protected $stackTrace = 0;
-  protected $logs = [];
-  public $traceLevel = 0;
+  const TRACE_NONE = 0;
+  const TRACE_ONE  = 1;
+  const TRACE_FULL = 2;
+
+  public bool $debug = false;
+
+  protected int $tapVersion = 12;
+  protected int $ran = 0;
+  protected int $failed = 0;
+  protected int $skipped = 0;
+  protected int $todo = 0;
+  protected int $planned = 0;
+  protected int $stackTrace = 0;
+  protected array $logs = [];
+
+  public int $traceLevel = 0;
 
   /**
    * Build a Test object.
    *
-   * @param mixed $opts  Generally an array of named options.
-   *                     If it's an integer, it's the 'version' option.
-   *
-   * Named options:
+   * @param array $opts  Options for the Test instance:
    *
    *  'plan'     (int)   The number of tests we have planned.
    *                     Default: 0 (unplanned)
@@ -33,16 +36,8 @@ class Test
    *                     Default: 12 (currently only supported version).
    *
    */
-  public function __construct ($opts=[])
+  public function __construct (array $opts=[])
   {
-    if (is_int($opts))
-    {
-      $opts = ['version'=>$opts];
-    }
-    elseif (!is_array($opts))
-    {
-      $opts = [];
-    }
     if (isset($opts['plan']))
     {
       $this->plan($opts['plan']);
@@ -60,7 +55,7 @@ class Test
   /**
    * Get the number of tests planned.
    */
-  public function planned ()
+  public function planned (): int
   {
     return $this->planned;
   }
@@ -68,7 +63,7 @@ class Test
   /**
    * Get the number of tests ran.
    */
-  public function ran ()
+  public function ran (): int
   {
     return $this->ran;
   }
@@ -76,7 +71,7 @@ class Test
   /**
    * Get the number of tests that failed.
    */
-  public function failed ()
+  public function failed (): int
   {
     return $this->failed;
   }
@@ -84,7 +79,7 @@ class Test
   /**
    * Get the number of tests that were skipped.
    */
-  public function skipped ()
+  public function skipped (): int
   {
     return $this->skipped;
   }
@@ -92,7 +87,7 @@ class Test
   /**
    * Get the number of tests that are TODO.
    */
-  public function areTodo ()
+  public function areTodo (): int
   {
     return $this->todo;
   }
@@ -100,7 +95,7 @@ class Test
   /**
    * Get the logs.
    */
-  public function getLogs ()
+  public function getLogs (): array
   {
     return $this->logs;
   }
@@ -115,17 +110,9 @@ class Test
    *
    * @return Test  Returns $this.
    */
-  public function trace ($level=1)
+  public function trace (int $level=self::TRACE_ONE): static
   {
-    if (is_int($level))
-    {
-      $this->stackTrace = $level;
-    }
-    else
-    {
-      $this->stackTrace = 0;
-    }
-
+    $this->stackTrace = $level;
     return $this;
   }
 
@@ -134,19 +121,14 @@ class Test
    *
    * @param int $count  Number of tests planned.
    *
+   *   A value less than 1 means we don't care about the number of tests,
+   *   and won't report the test plan up front.
+   *
    * @return Test  Returns $this.
    */
-  public function plan ($count)
+  public function plan (int $count): static
   {
-    if (is_int($count))
-    {
-      $this->planned = $count;
-    }
-    else
-    {
-      $this->planned = 0;
-    }
-
+    $this->planned = $count;
     return $this;
   }
 
@@ -162,8 +144,10 @@ class Test
    * Support for version 13 is being planned, and will require the
    * YAML PHP extension to be available.
    *
+   * @return int|Test  If $ver was null, returns the current version.
+   *                   Otherwise, returns $this.
    */
-  public function version ($ver=null)
+  public function version (?int $ver=null): int|static
   {
     if (isset($ver) && is_int($ver))
     {
@@ -185,12 +169,15 @@ class Test
   /**
    * Does a test pass?
    *
+   * Every other test method calls this behind the scenes.
+   *
    * @param bool $test  The evaluated test value.
-   * @param string $desc  (Optional) Description of test.
-   * @param string $directive (Optional) Added details for test.
+   * @param ?string $desc  (Optional) Description of test.
+   * @param mixed $directive (Optional) Added details for test.
+   *
    * @return Test_Log  The log entry for this test.
    */
-  public function ok ($test, $desc=null, $directive=null)
+  public function ok (bool $test, ?string $desc=null, mixed $directive=null): Test_Log
   {
     $log = new Test_Log();
     $this->ran++;
@@ -230,11 +217,12 @@ class Test
   /**
    * Fail a test.
    *
-   * @param string $desc  (Optional) Description of test.
-   * @param string $directive (Optional) Added details for test.
+   * @param ?string $desc  (Optional) Description of test.
+   * @param mixed $directive (Optional) Added details for test.
+   *
    * @return Test_Log  The log entry for this test.
    */
-  public function fail ($desc=null, $directive=null)
+  public function fail (?string $desc=null, mixed $directive=null): Test_Log
   {
     $this->traceLevel++;
     $log = $this->ok(false, $desc, $directive);
@@ -245,11 +233,12 @@ class Test
   /**
    * Pass a test.
    *
-   * @param string $desc  (Optional) Description of test.
-   * @param string $directive (Optional) Added details for test.
+   * @param ?string $desc  (Optional) Description of test.
+   * @param mixed $directive (Optional) Added details for test.
+   *
    * @return Test_Log  The log entry for this test.
    */
-  public function pass ($desc=null, $directive=null)
+  public function pass (?string $desc=null, mixed $directive=null)
   {
     $this->traceLevel++;
     $log = $this->ok(true, $desc, $directive);
@@ -261,10 +250,11 @@ class Test
    * Test to see if a closure throws an exception/error.
    *
    * @param Callable $test  The Closure or Callable to test.
-   * @param string $desc  (Optional) Description of test.
+   * @param ?string $desc  (Optional) Description of test.
+   *
    * @return Test_Log  The log entry for this test.
    */
-  public function dies ($test, $desc=null)
+  public function dies (callable $test, ?string $desc=null)
   {
     $this->traceLevel++;
     $ok = false;
@@ -288,40 +278,73 @@ class Test
    *
    * @param mixed $got  Value we got from the test.
    * @param mixed $want  Value we wanted/expected.
-   * @param string $comparitor  A comparitor to test with.
-   *  One of: '===', '!==', '==', '!=', '>', '<', '<=', '>='
+   * @param string $comparitor  A comparitor to test with:
+   *
+   *   - '===', 'is',
+   *   - '!==', 'isnt',
+   *   - '==',  'eq',
+   *   - '!=',  'ne',
+   *   - '>',   'gt',
+   *   - '<',   'lt',
+   *   - '>='   'ge',  'gte'
+   *   - '<=',  'le',  'lte'
+   *    
    * @param string $desc (Optional) Description of test.
    * @param bool $stringify (Optional, default true) JSONify output?
+   *
    * @param Test_Log  The log entry for this test.
    */
-  public function cmp ($got, $want, $comp, $desc=null, $stringify=true)
+  public function cmp (
+    mixed $got, 
+    mixed $want, 
+    string $comp, 
+    ?string $desc=null, 
+    bool $stringify=true): Test_Log
   {
     switch ($comp)
     {
+      case 'is':
       case '===':
         $test = ($got === $want);
         break;
+
+      case 'isnt':
       case '!==':
         $test = ($got !== $want);
         break;
+
+      case 'eq':
       case '==':
         $test = ($got == $want);
         break;
+
+      case 'ne':
       case '!=':
         $test = ($got != $want);
         break;
+
+      case 'lt':
       case '<':
         $test = ($got < $want);
         break;
+
+      case 'gt':
       case '>':
         $test = ($got > $want);
         break;
+
+      case 'le':
+      case 'lte':
       case '<=':
         $test = ($got <= $want);
         break;
+
+      case 'ge':
+      case 'gte':
       case '>=':
         $test = ($got >= $want);
         break;
+
       default:
         $test = false;
     }
@@ -335,6 +358,51 @@ class Test
       $log->details['comparitor'] = $comp;
       $log->details['stringify'] = $stringify;
     }
+    return $log;
+  }
+
+  /**
+   * See if something is a 'whatever'.
+   *
+   * TODO: document this, and add a test file for it.
+   */
+  public function isa ($got, $want, $desc=null, $stringify=true)
+  {
+    $ok = false;
+    if (is_object($got))
+    {
+      if (is_string($want) && strtolower($want) === 'object')
+      {
+        $ok = true;
+      }
+      elseif ($got instanceof $what)
+      {
+        $ok = true;
+      }
+    }
+    elseif (is_string($want))
+    {
+      $want = strtolower($want);
+      $type = strtolower(get_debug_type($got));
+      if ($what === $type)
+      {
+        $ok = true;
+      }
+      else
+      {
+        $type = strtolower(gettype($got));
+        if ($what === $type)
+        {
+          $ok = true;
+        }
+      }
+    }
+
+    $this->traceLevel++;
+    $log = $this->ok($ok, $desc);
+    $this->traceLevel--;
+
+    // TODO: more details?
     return $log;
   }
 
@@ -547,38 +615,39 @@ class Test_Log
   /**
    * The test succeeded.
    */
-  public $ok = false;
+  public bool $ok = false;
 
   /**
    * The test was skipped.
    */
-  public $skipped = false;
+  public bool $skipped = false;
 
   /**
    * The test is TODO.
    */
-  public $todo = false;
+  public bool $todo = false;
 
   /**
    * The reason the test was skipped.
    */
-  public $reason = '';
+  public string $reason = '';
 
   /**
    * Description of the test.
    */
-  public $desc = null;
+  public ?string $desc = null;
 
   /**
    * Extra directive message, or a Throwable that was thrown.
    */
-  public $directive = null;
-  public $details = [];
-  public $traceLevel = 0;
-  public $stackTrace = null;
-  public $fullTrace = false;
+  public mixed $directive = null;
 
-  public function tap ($num)
+  public array $details = [];
+  public int $traceLevel = 0;
+  public ?array $stackTrace = null;
+  public bool $fullTrace = false;
+
+  public function tap (int $num)
   {
     $out;
     if ($this->ok)
@@ -594,7 +663,10 @@ class Test_Log
     if (is_string($this->directive))
       $out .= ' # ' . $this->directive;
     elseif ($this->directive instanceof \Throwable)
-      $out .= ' # ' . $this->directive->getMessage();
+      $out .= ' # ' . get_class($this->directive)
+      . ': ' . $this->directive->getMessage();
+    elseif (!is_null($this->directive))
+      $out .= ' # ' . json_encode($this->directive);
     elseif ($this->skipped)
       $out .= ' # SKIP ' . $this->reason;
     elseif ($this->todo)

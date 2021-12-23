@@ -2,11 +2,16 @@
 /**
  * A Functional interface to the Test library.
  *
- * Your test file MUST be in the Lum\Test namespace for this to work.
+ * Your test file must either be in the Lum\Test namespace, or must:
+ *
+ *   use function \Lum\Test\{plan,ok,is}; // Add any methods you want to use.
+ *
  * For each of the functions defined below, see the Lum\Test method of the
  * same name for information on how it works and what parameters you can pass.
  *
  * You MUST call Functional::start() before using any of the functions.
+ * Not only will it make the autoloader load this file, but it will also
+ * create the singleton Test instance used for the functional interface.
  */
 
 namespace Lum\Test;
@@ -83,6 +88,14 @@ function dies ($t, $d=null)
 function cmp_ok ($g, $w, $c, $d=null, $s=true)
 {
   return Functional::$instance->cmp($g,$w,$c,$d,$s);
+}
+
+/**
+ * Test to see if a value is a 'something'.
+ */
+function isa ($g, $w, $d=null, $s=true)
+{
+  return Functional::$instance->isa($g,$w,$d,$s);
 }
 
 /**
