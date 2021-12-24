@@ -6,5 +6,5 @@ $tests = new \Lum\Test\Harness();
 $tests->addDir('test/harness');
 $tests->run();
 
-echo $tests->summary();
+echo $tests->tap();
 return $tests->testSuite();

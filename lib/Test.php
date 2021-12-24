@@ -2,24 +2,76 @@
 
 namespace Lum;
 
+use Lum\Test\InvalidVersionException;
+
+/**
+ * A simple testing class inspired by Perl, and using the TAP protocol.
+ */
 class Test
 {
+  /** No stack trace in output. */
   const TRACE_NONE = 0;
+  /** Show last method call for failed tests. */
   const TRACE_ONE  = 1;
+  /** Show full stack trace for failed tests. */
   const TRACE_FULL = 2;
 
-  public bool $debug = false;
+  /** Do not change the case of anything. */
+  const CASE_NONE   = 0;
+  /** Make everything lowercase. */
+  const CASE_LOWER  = 1;
+  /** Try original case, lowercase, and if applicable "Namespace\Case". */
+  const CASE_JUGGLE = 2;
 
-  protected int $tapVersion = 12;
+  /** Consider any Throwable a success. */
+  const DIES_ALL        = 0;
+  /** Only consider Exceptions a success. */
+  const DIES_EXCEPTIONS = 1;
+  /** Only consider Errors a success. */
+  const DIES_ERRORS     = 2;
+
+  /** Show no extra info in test output. */
+  const SHOW_NONE     = 0;
+  /** Show basic info. */
+  const SHOW_SUMMARY  = 1;
+  /** Show extended info. */
+  const SHOW_DETAILS  = 2;
+  /** Show debugging info. */
+  const SHOW_DEBUG    = 3;
+
+  /**
+   * The default verbosity level for all new instances.
+   * Default: {@see \Lum\Test::SHOW_SUMMARY}
+   */
+  public static int $VERBOSITY = self::SHOW_SUMMARY;
+
+  /**
+   * The default stack trace type for all new instances.
+   * Default: {@see \Lum\Test::TRACE_NONE}
+   */
+  public static int $STACK_TRACE = self::TRACE_NONE;
+
+  /**
+   * The default TAP version to use for all new instances.
+   * Default: `12`
+   */
+  public static int $TAP_VERSION = 12;
+
+  /** The current functional call depth within the testing functions. */
+  public int $traceLevel = 0;
+
+  /** The instance-specific verbosity level. */
+  public int $verbose;
+
   protected int $ran = 0;
   protected int $failed = 0;
   protected int $skipped = 0;
   protected int $todo = 0;
   protected int $planned = 0;
-  protected int $stackTrace = 0;
   protected array $logs = [];
 
-  public int $traceLevel = 0;
+  protected int $tapVersion = 0;
+  protected int $stackTrace;
 
   /**
    * Build a Test object.
@@ -27,29 +79,80 @@ class Test
    * @param array $opts  Options for the Test instance:
    *
    *  'plan'     (int)   The number of tests we have planned.
-   *                     Default: 0 (unplanned)
+   *                     Shortcut for {@see \Lum\Test::plan()}
+   *                     Default: `0` 
    *
-   *  'trace'    (int)   The level of stack trace details we should return.
-   *                     Default: 0 (no stack trace)
+   *  'trace'    (int)   The kind of stack trace should we return.
+   *                     Shortcut for {@see \Lum\Test::trace()}
+   *                     Default: {@see \Lum\Test::$STACK_TRACE}
+   *                     
    *
    *  'version'  (int)   The TAP version.
-   *                     Default: 12 (currently only supported version).
+   *                     Shortcut for {@see \Lum\Test::version()}
+   *                     Default: {@see \Lum\Test::$TAP_VERSION}
+   *
+   *  'verbose'  (int)   The verbosity level.
+   *                     Shortcut for {@see \Lum\Test::verbose()}
+   *                     Default: {@see \Lum\Test::$VERBOSITY} 
    *
    */
   public function __construct (array $opts=[])
   {
-    if (isset($opts['plan']))
+    if (isset($opts['plan']) && is_int($opts['plan']))
     {
       $this->plan($opts['plan']);
     }
-    if (isset($opts['trace']))
+
+    if (isset($opts['trace']) && is_int($opts['trace']))
     {
       $this->trace($opts['trace']);
     }
+    else
+    {
+      $this->trace(static::$STACK_TRACE);
+    }
+
     if (isset($opts['version']))
     {
       $this->version($opts['version']);
     }
+    else
+    {
+      $this->version(static::$TAP_VERSION);
+    }
+
+    if (isset($opts['verbose']))
+    {
+      $this->verbose($opts['verbose']);
+    }
+    else
+    {
+      $this->verbose(static::$VERBOSITY);
+    }
+  }
+
+  /**
+   * Check success.
+   *
+   * @param bool $noTodo  (Optional) Don't include TODO as failures.
+   *                      Default: `true`
+   */
+  public function success (bool $noTodo=true): bool
+  {
+    return ($this->failed($noTodo) == 0
+      && ($this->planned == 0
+      || $this->planned == $this->ran));
+  }
+
+  /**
+   * Get the number of tests that succeeded.
+   *
+   * @param bool $noTodo  (Optional) Don't include TODO as failures.
+   *                      Default: `true`
+   */
+  public function succeeded (bool $noTodo=true): int
+  {
+    return $this->ran - $this->failed($noTodo);
   }
 
   /**
@@ -70,10 +173,16 @@ class Test
 
   /**
    * Get the number of tests that failed.
+   *
+   * @param bool $noTodo  (Optional) Don't include TODO in the results.
+   *                      Default: `false`
    */
-  public function failed (): int
+  public function failed (bool $noTodo=false): int
   {
-    return $this->failed;
+    if ($noTodo)
+      return $this->failed = $this->todo;
+    else
+      return $this->failed;
   }
 
   /**
@@ -101,18 +210,30 @@ class Test
   }
 
   /**
-   * Change stack trave level.
+   * Change stack trace level.
    *
-   * @param int $level (default 1) Level of detail for stack traces.
-   *                               0 = No stack traces.
-   *                               1 = Show only test that failed.
-   *                               2 = Show full stack trace.
+   * @param int $level (Optional) Level of detail for stack traces.
+   *                   Use one of the `TRACE_*` class constants.
+   *                   Default: {@see \Lum\Test::TRACE_ONE}
    *
-   * @return Test  Returns $this.
+   * @return self
    */
   public function trace (int $level=self::TRACE_ONE): static
   {
     $this->stackTrace = $level;
+    return $this;
+  }
+
+  /**
+   * Change output verbosity level.
+   *
+   * @param int $level (Optional) Level of detail for test output.
+   *                   Use one of the `SHOW_*` class constants.
+   *                   Default: {@see \Lum\Test::SHOW_DETAILS}
+   */
+  public function verbose (int $level=self::SHOW_DETAILS): static
+  {
+    $this->verbose = $level;
     return $this;
   }
 
@@ -124,7 +245,7 @@ class Test
    *   A value less than 1 means we don't care about the number of tests,
    *   and won't report the test plan up front.
    *
-   * @return Test  Returns $this.
+   * @return self
    */
   public function plan (int $count): static
   {
@@ -144,7 +265,7 @@ class Test
    * Support for version 13 is being planned, and will require the
    * YAML PHP extension to be available.
    *
-   * @return int|Test  If $ver was null, returns the current version.
+   * @return int|self  If $ver was null, returns the current version.
    *                   Otherwise, returns $this.
    */
   public function version (?int $ver=null): int|static
@@ -157,13 +278,20 @@ class Test
       }
       else
       {
-        throw new \Exception("Invalid TAP version, must be 12 or 13.");
+        throw new InvalidVersionException;
       }
+      return $this;
     }
     else
     {
       return $this->tapVersion;
     }
+  }
+
+  /** Internal helper method for building a new log. */
+  protected function newLog(): Test_Log
+  {
+    return new Test_Log($this);
   }
 
   /**
@@ -177,9 +305,12 @@ class Test
    *
    * @return Test_Log  The log entry for this test.
    */
-  public function ok (bool $test, ?string $desc=null, mixed $directive=null): Test_Log
+  public function ok (
+    bool $test, 
+    ?string $desc=null, 
+    mixed $directive=null): Test_Log
   {
-    $log = new Test_Log();
+    $log = $this->newLog();
     $this->ran++;
     if ($test)
     {
@@ -188,11 +319,11 @@ class Test
     else
     {
       $this->failed++;
-      if ($this->stackTrace)
+      if ($this->stackTrace >= self::TRACE_ONE)
       {
         $log->traceLevel = $this->traceLevel;
         $log->stackTrace = debug_backtrace();
-        if ($this->stackTrace > 1)
+        if ($this->stackTrace >= self::TRACE_FULL)
         {
           $log->fullTrace = true;
         }
@@ -251,10 +382,16 @@ class Test
    *
    * @param Callable $test  The Closure or Callable to test.
    * @param ?string $desc  (Optional) Description of test.
+   * @param int $types     (Optional) Types of Throwables to catch.
+   *                       Use One of the `DIES_*` constants.
+   *                       Default: `DIES_ALL`
    *
    * @return Test_Log  The log entry for this test.
    */
-  public function dies (callable $test, ?string $desc=null)
+  public function dies (
+    callable $test, 
+    ?string $desc=null, 
+    int $types=self::DIES_ALL)
   {
     $this->traceLevel++;
     $ok = false;
@@ -263,9 +400,16 @@ class Test
     {
       $test();
     }
-    catch(\Throwable $e)
+    catch(\Exception $e)
     {
-      $ok = true;
+      if ($types === self::DIES_ALL || $types === self::DIES_EXCEPTIONS)
+        $ok = true;
+      $err = $e;
+    }
+    catch(\Error $e)
+    {
+      if ($types === self::DIES_ALL || $types === self::DIES_ERRORS)
+        $ok = true;
       $err = $e;
     }
     $log = $this->ok($ok, $desc, $err);
@@ -280,12 +424,12 @@ class Test
    * @param mixed $want  Value we wanted/expected.
    * @param string $comparitor  A comparitor to test with:
    *
-   *   - '===', 'is',
-   *   - '!==', 'isnt',
-   *   - '==',  'eq',
-   *   - '!=',  'ne',
-   *   - '>',   'gt',
-   *   - '<',   'lt',
+   *   - '===', 'is'         {@see is() alias}
+   *   - '!==', 'isnt'       {@see isnt() alias}
+   *   - '==',  'eq'
+   *   - '!=',  'ne'
+   *   - '>',   'gt'
+   *   - '<',   'lt'
    *   - '>='   'ge',  'gte'
    *   - '<=',  'le',  'lte'
    *    
@@ -362,35 +506,71 @@ class Test
   }
 
   /**
-   * See if something is a 'whatever'.
+   * See if something is a specific type.
    *
-   * TODO: document this, and add a test file for it.
+   * @param mixed $got  Value to test.
+   * @param string $want Type of variable or object we want.
+   *
+   *   - 'null'    'NULL',
+   *   - 'bool',   'boolean'
+   *   - 'int',    'integer'
+   *   - 'float',  'double'
+   *   - 'string'
+   *   - 'array'
+   *   - 'object'
+   *   - 'resource', 'resource (closed)', 'resource (stream)', ...
+   *   - 'class@anonymous'
+   *   - 'closure'
+   *   - 'iterable'
+   *   - 'callable'
+   *   - 'My\Namespace\Class', 'Another_Class', ...
+   *
+   *   For object values we use the instanceof operator, so in addition
+   *   to the actual classname of the object, any parent classes or interfaces
+   *   will also be matched. The 'iterable' and 'callable' are pseudo-types,
+   *   and 'closure' is a built-in classname used by anonymous functions.
+   *
+   *   While PHP namespaces and classnames are case-insensitive, many
+   *   autoloaders are not, and no case-juggling is done by default, 
+   *   so be aware.
+   *
+   * @param string $desc (Optional) Description of test.
+   * @param int $caseJuggling (Optional, default false) Try alternate cases.
+   *
+   *   Basically means 
+   *
+   * @return Test_Log  The log entry for this test.
    */
-  public function isa ($got, $want, $desc=null, $stringify=true)
+  public function isa (
+    mixed $got, 
+    string $want, 
+    ?string $desc=null, 
+    bool $stringify=true)
   {
     $ok = false;
-    if (is_object($got))
-    {
-      if (is_string($want) && strtolower($want) === 'object')
-      {
-        $ok = true;
-      }
-      elseif ($got instanceof $what)
-      {
-        $ok = true;
-      }
+
+    if ($want === 'iterable' && is_iterable($got))
+    { // The item is iterable.
+      $ok = true;
     }
-    elseif (is_string($want))
-    {
-      $want = strtolower($want);
-      $type = strtolower(get_debug_type($got));
+    elseif ($want === 'callable' && is_callable($got))
+    { // The item is a callable of some sort.
+      $ok = true;
+    }
+    elseif (is_object($got) && $got instanceof $want)
+    { // The object is an instance of the class/interface.
+      $ok = true;
+    }
+    else
+    { // Find some built-in type names.
+      $type = get_debug_type($got);
       if ($what === $type)
       {
         $ok = true;
       }
       else
       {
-        $type = strtolower(gettype($got));
+        $type = gettype($got);
         if ($what === $type)
         {
           $ok = true;
@@ -402,7 +582,6 @@ class Test
     $log = $this->ok($ok, $desc);
     $this->traceLevel--;
 
-    // TODO: more details?
     return $log;
   }
 
@@ -612,6 +791,13 @@ class Test
  */
 class Test_Log
 {
+  protected Test $parent;
+
+  public function __construct(Test $parent)
+  {
+    $this->parent = $parent;
+  }
+
   /**
    * The test succeeded.
    */

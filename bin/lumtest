@@ -3,16 +3,69 @@
 
 require_once 'vendor/autoload.php';
 
-$opts = getopt('d:e:');
+$opts = getopt('d:e:vqsST:');
+
+$silent = false;
+$output = false;
+$plan   = true;
+$setdef = true;
+$hopts  = [];
+
+$cs = \Lum\Test::$STACK_TRACE;
+$cv = \Lum\Test::$VERBOSITY;
+$ct = \Lum\Test::$TAP_VERSION;
 
 $dir = (isset($opts['d']) && is_string($opts['d'])) ? $opts['d'] : 'test';
 $ext = (isset($opts['e']) && is_string($opts['e'])) ? $opts['e'] : 'php';
 
-$tests = new \Lum\Test\Harness();
+function get_incr ($opts, $ik, $dk, $val)
+{
+  if (isset($opts[$ik]))
+  {
+    $tv = $opts[$ik];
+    if ($tv === false)
+    { // getopt uses false to mean it was present, but without a value.
+      $val++;
+    }
+    elseif (is_array($tv))
+    {
+      $val += count($tv);
+    }
+  }
+  if (isset($opts[$dk]))
+  {
+    $tv = $opts[$dk];
+    if ($tv === false)
+    {
+      $val--;
+    }
+    elseif (is_array($tv))
+    {
+      $val -= count($tv);
+    }
+  }
+  return $val;
+}
+
+$nv = get_incr($opts, 'v', 'q', $cv);
+if ($nv != $cv)
+{ // The verbosity level has changed.
+  $hopts['verbose'] = $nv;
+  if ($nv > 0) $output = true;
+  elseif ($nv < 0) $silent = true;
+}
+
+$ns = get_incr($opts, 's', 'S', $cs);
+if ($ns != $cs)
+{
+  $hopts['stack'] = $nv;
+}
+
+$tests = new \Lum\Test\Harness($hopts, $setdef);
 $tests->addDir($dir, $ext);
 $tests->run();
 
-echo $tests->summary();
+echo $tests->tap();
 if ($tests->success())
 { // All tests completed successfully.
   exit(0);

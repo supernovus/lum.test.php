@@ -2,6 +2,8 @@
 
 namespace Lum\Test;
 
+use \Lum\Test as T;
+
 /**
  * Test Harness.
  *
@@ -12,11 +14,11 @@ namespace Lum\Test;
  */
 class Harness
 {
-  public $debug = false;
   protected $testSuite;
   protected $testFiles = [];
   protected $testOutput = [];
   protected $testInstances = [];
+  protected $testOpts;
 
   /**
    * Build a new Test Harness.
@@ -24,11 +26,77 @@ class Harness
    * Initializes an internal Test instance that will be used to
    * keep track of whether the tests we run succeeded or failed.
    *
-   * The constructor takes no parameters.
+   * @param array $opts  (Optional) Constructor options for the Test Suite.
+   *
+   *   By default this only applies to the internal Test suite, which is
+   *   created by the Harness to keep track of which test files passed and 
+   *   which failed. However the `$setDefaults` parameter can change that.
+   *
+   *   {@see \Lum\Test::__construct()}
+   *
+   * @param bool|array $setDefaults  (Optional, default: `false`)
+   *
+   *   If `true`, the `$opts` applies to all tests.
+   *
+   *   If an `array` it's the options to apply to tests instead of `$opts`,
+   *   in this case `$opts` will only be used for the internal Test suite.
+   *
+   *   Regardless of if its `true` or an `array`, only the 
+   *   `verbose`, `trace`, and `version` options have any affect on default 
+   *   values, anything else will be ignored.
+   *
+   *   If `false` the defaults are left alone entirely.
+   *
    */
-  public function __construct ()
+  public function __construct (array $opts=[], bool|array $setDefaults=false)
   {
-    $this->testSuite = new \Lum\Test();
+    if ($setDefaults === true)
+    { // Use the $opts to get defaults.
+      $setDefaults = $opts;
+    }
+    if (is_array($setDefaults))
+    { // Set default values.
+      if (isset($setDefaults['trace']) && is_int($setDefaults['trace']))
+        $this->setStackTrace($setDefaults['trace']);
+      if (isset($setDefaults['verbose']) && is_int($setDefaults['verbose']))
+        $this->setVerbosity($setDefaults['verbose']);
+      if (isset($setDefaults['version']) && is_int($setDefaults['version']))
+        $this->setVersion($setDefaults['version']);
+    }
+
+    $this->testOpts = $opts; // Save for later.
+    $this->testSuite = new T($opts);
+  }
+
+  /** Get the default verbosity level for tests. */
+  public function getVerbosity(): int
+  {
+    return T::$VERBOSITY;
+  }
+
+  /** Change the default verbosity level for tests. */
+  public static function setVerbosity (int $level)
+  {
+    T::$VERBOSITY = $level;
+  }
+
+  /** Change the default stack trace type for all tests. */
+  public function setStackTrace (int $level)
+  {
+    T::$STACK_TRACE = $level;
+  }
+
+  /** Change the default TAP version for all tests. */
+  public function setVersion (int $version)
+  {
+    if ($version === 12 || $version === 13)
+    {
+      T::$TAP_VERSION = $version;
+    }
+    else
+    {
+      throw new InvalidVersionException;
+    }
   }
 
   /**
@@ -41,7 +109,7 @@ class Harness
   {
     if (file_exists($file))
     {
-      $this->tests[] = $file;
+      $this->testFiles[] = $file;
     }
     return $this;
   }
@@ -66,7 +134,7 @@ class Harness
         if ($file == '.' || $file == '..') continue;
         if (preg_match("/\.(?:$ext)$/", $file))
         { // It matches our file extension.
-          $this->tests[] = join(DIRECTORY_SEPARATOR, [$dir, $file]);
+          $this->testFiles[] = join(DIRECTORY_SEPARATOR, [$dir, $file]);
         }
       }
     }
@@ -82,9 +150,9 @@ class Harness
   {
     if ($plan)
     {
-      $this->testSuite->plan(count($this->tests));
+      $this->testSuite->plan(count($this->testFiles));
     }
-    foreach ($this->tests as $testfile)
+    foreach ($this->testFiles as $testfile)
     {
       $this->runTest($testfile);
     }
@@ -101,7 +169,7 @@ class Harness
    * @param string $file  The test file to run.
    * @return array [$output, $instance];
    */
-  public function runTest ($__test_file)
+  public function runTest ($__test_file, bool $noTodo=true)
   {
     ob_start(); // Start output buffering.
     $returnVal = null;
@@ -123,18 +191,23 @@ class Harness
     {
       return [$outputVal, $returnVal];
     }
-    if (isset($returnVal) && $returnVal instanceof \Lum\Test)
+    if (isset($returnVal) 
+      && ($returnVal instanceof \Lum\Test) 
+      || ($returnVal instanceof \Lum\Test\Harness)
+      || ($returnVal instanceof \Lum\Test\Mock))
     { // Use the Test instance to determine success.
-      $testsFailed = $returnVal->failed() - $returnVal->areTodo();
-      $this->testSuite->is($testsFailed, 0, $__test_file);
+      //$testsFailed = $returnVal->failed() - $returnVal->areTodo();
+      //$this->testSuite->is($testsFailed, 0, $__test_file);
+      $this->testSuite->ok($returnVal->success($noTodo), $__test_file);
     }
     elseif (isset($outputVal) && trim($outputVal) != '')
     {
       $parsed = $this->parseTAP($outputVal);
       if (isset($parsed))
       {
-        $testsFailed = $parsed->failed - $parsed->todo;
-        $this->testSuite->is($testsFailed, 0, $__test_file);
+        //$testsFailed = $parsed->failed - $parsed->todo;
+        //$this->testSuite->is($testsFailed, 0, $__test_file);
+        $this->testSuite->ok($parsed->success($noTodo), $__test_file);
       }
       else
       {
@@ -146,30 +219,6 @@ class Harness
       $this->testSuite->fail($__test_file, "nothing returned from test");
     }
     return [$outputVal, $returnVal];
-  }
-
-  /**
-   * Get a summary of the test results.
-   *
-   * @return string  TAP output from our test suite.
-   */
-  public function summary ()
-  {
-    return $this->testSuite->tap();
-  }
-
-  /**
-   * Did all of the tests pass, and did the number of tests ran match
-   * the plan if it was passed.
-   *
-   * @return bool
-   */
-  public function success ()
-  {
-    return ($this->testSuite->failed() == 0
-      && ($this->testSuite->planned() == 0 
-      || $this->testSuite->planned() == $this->testSuite->ran())
-   );
   }
 
   /**
@@ -198,11 +247,22 @@ class Harness
     return $this->testInstances;
   }
 
+  /** 
+   * Make a sub-test using the options we have saved.
+   */
+  public function subTest(?array $topts=null): T
+  {
+    if (!isset($topts))
+      $topts = $this->testOpts;
+    unset($topts['plan']); // We don't want a plan ahead of time.
+    return new T($opts);
+  }
+
   /**
    * Parse TAP output into a simple object.
    *
    * @param string $tap  A full TAP output string to parse.
-   * @return object  A simple object with the following public properties:
+   * @return Mock  An object with the following public properties:
    *
    *  $planned     (int)  Number of tests planned (0 if no tests plan found.)
    *  $ran         (int)  Number of tests that were actually ran.
@@ -210,18 +270,12 @@ class Harness
    *  $skipped     (int)  Number of tests that were skipped.
    *  $todo        (int)  Number of tests that were TODO.
    *
-   * To determine if a TAP suite was successful:
+   * As well as a `success()` method with the same API as Test.
    *
-   *  ($object->failed - $object->todo == 0)
    */
-  public function parseTAP ($tap)
+  public function parseTAP (string $tap): Mock
   {
-    $obj = new \StdClass();
-    $obj->planned = 0;
-    $obj->ran     = 0;
-    $obj->failed  = 0;
-    $obj->skipped = 0;
-    $obj->todo    = 0;
+    $obj = new Mock;
 
     preg_match("/^1..(\d+)$/m", $tap, $plan);
     preg_match_all("/^not\s+ok.*?$/m", $tap, $failures);
@@ -257,11 +311,28 @@ class Harness
       }
     }
 
-    if ($this->debug)
+    if ($this->testSuite->verbose >= T::SHOW_DEBUG)
     {
       error_log("# tapObject: ".json_encode($obj));
     }
 
     return $obj;
   }
+
+  /**
+   * Look for any unknown methods in our internal Test instance.
+   */
+  public function __call ($name, $args)
+  {
+    $cb = [$this->testSuite, $name];
+    if (is_callable($cb))
+    {
+      return call_user_func_array($cb, $args);
+    }
+    else
+    {
+      throw new \Exception("No such method: '$name' in ".get_class($this));
+    }
+  }
+
 }
