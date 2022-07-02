@@ -535,9 +535,6 @@ class Test
    *   so be aware.
    *
    * @param string $desc (Optional) Description of test.
-   * @param int $caseJuggling (Optional, default false) Try alternate cases.
-   *
-   *   Basically means 
    *
    * @return Test_Log  The log entry for this test.
    */
@@ -564,14 +561,14 @@ class Test
     else
     { // Find some built-in type names.
       $type = get_debug_type($got);
-      if ($what === $type)
+      if ($want === $type)
       {
         $ok = true;
       }
       else
       {
         $type = gettype($got);
-        if ($what === $type)
+        if ($want === $type)
         {
           $ok = true;
         }
