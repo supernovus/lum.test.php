@@ -180,7 +180,7 @@ class Test
   public function failed (bool $noTodo=false): int
   {
     if ($noTodo)
-      return $this->failed = $this->todo;
+      return $this->failed - $this->todo;
     else
       return $this->failed;
   }
